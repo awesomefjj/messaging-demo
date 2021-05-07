@@ -1,0 +1,176 @@
+#
+# = 使用说明：
+#
+# 每个项目，需提前在 Gitlab CI 的变量列表中定义一下变量
+#
+# == 全局的变量
+#
+# BUNDLE_GEMS__TANMER__COM: gems.tanmer.com 的登录密码，安装 Gem 时需要
+#
+# == 需要定义 dev/staging/prod scope 下的变量值
+#
+# KUBECONFIG_BASE64: 通过 k8s 部署时，需要提供的 Token 信息
+# ENABLE_BUILD: 是否开启编译功能
+# ENABLE_DEPLOY: 是否开启部署功能
+# K8S_NAMESPACE: 部署到的 Namespace
+#image: alpine:latest
+
+variables:
+  DEPLOYER_IMAGE: "docker.io/tanmerk8s/devspace:v5.12.1"
+  GIT_SUBMODULE_STRATEGY: recursive
+
+stages:
+# - test
+- build
+- deploy
+
+
+# test:
+#   stage: test
+#   cache:
+#     key: gems
+#     paths:
+#       - vendor/bundle
+#   services:
+#     - redis:4.0-alpine
+#     - postgres:10-alpine
+#   image: docker.corp.tanmer.com/tamigos/api/testbox
+#   variables:
+#     RAILS_ENV: test
+#     POSTGRES_PASSWORD: dev
+#   script:
+#     - bundle install --jobs $(nproc) --path vendor/bundle
+#     - bin/rails db:create db:migrate
+#     - bin/rails db:migrate
+#     - bundle exec rspec
+
+.build: &build
+  stage: build
+  image: ${DEPLOYER_IMAGE}
+  script:
+  - config_k8s
+  - login_docker
+  - devspace --var=DEPLOY_ENV=dummy -p=${DEVSPACE_PROFILE} build
+
+build:dev:
+  <<: *build
+  variables:
+    DEVSPACE_PROFILE: dev
+  environment:
+    name: dev
+  only:
+    refs:
+    - /^sprint\/(\d{6}|\d{8})$/
+    variables:
+    - $ENABLE_BUILD == "y"
+  when: delayed
+  start_in: 30 minutes
+
+build:staging:
+  <<: *build
+  variables:
+    DEVSPACE_PROFILE: staging
+  environment:
+    name: staging
+  only:
+    refs:
+    - master
+    variables:
+    - $ENABLE_BUILD == "y"
+
+build:production:
+  <<: *build
+  variables:
+    DEVSPACE_PROFILE: production
+  environment:
+    name: prod
+  only:
+    refs:
+    - /^v-\d+\.\d+\.\d/
+    variables:
+    - $ENABLE_BUILD == "y"
+
+.deploy: &deploy
+  stage: deploy
+  image: ${DEPLOYER_IMAGE}
+  when: on_success
+  script:
+  - config_k8s
+  - login_docker
+  - devspace --var=DEPLOY_ENV=dummy --namespace=${K8S_NAMESPACE} --skip-build=true -p=${DEVSPACE_PROFILE} deploy
+
+deploy:dev:
+  <<: *deploy
+  variables:
+    DEVSPACE_PROFILE: dev
+  environment:
+    name: dev
+  only:
+    refs:
+    - /^sprint\/(\d{6}|\d{8})$/
+    variables:
+    - $ENABLE_BUILD == "y"
+
+deploy:staging:
+  <<: *deploy
+  variables:
+    DEVSPACE_PROFILE: staging
+  environment:
+    name: staging
+  only:
+    refs:
+    - master
+    variables:
+    - $ENABLE_BUILD == "y"
+
+deploy:production:
+  <<: *deploy
+  variables:
+    DEVSPACE_PROFILE: production
+  environment:
+    name: prod
+  only:
+    refs:
+    - /^v-\d+\.\d+\.\d/
+    variables:
+    - $ENABLE_BUILD == "y"
+
+before_script:
+  - |
+    function config_k8s(){
+      check_variable KUBECONFIG_BASE64 '必须在 Gitlab CI variables 中添加变量 KUBECONFIG_BASE64' \
+        && check_variable K8S_NAMESPACE '必须在 Gitlab CI variables 中添加变量 K8S_NAMESPACE' \
+        && mkdir -p ~/.kube \
+        && echo ${KUBECONFIG_BASE64} | base64 -d > ~/.kube/config
+    }
+
+    function login_docker() {
+      if [[ -n "${CI_REGISTRY_USER}" ]]; then
+        echo "Logging to GitLab Container Registry with CI credentials..."
+        echo "${CI_REGISTRY_PASSWORD}" | docker login -u "${CI_REGISTRY_USER}" --password-stdin "${CI_REGISTRY}"
+        echo ""
+      fi
+    }
+
+    function get_value_of(){
+        local variable_name=$1
+        local variable_value=""
+        if set | grep -q "^$variable_name="; then
+          eval variable_value="\$$variable_name"
+        fi
+        echo "$variable_value"
+    }
+
+    function check_variable() {
+      local msg=$2
+      local value=$(get_value_of $1)
+      if [ -z "${value}" ]; then
+        echo $msg
+        false
+      else
+        true
+      fi
+    }
+
+    # Gitlab 是 checkout 到 commit，没有到分支，导致自动解析 image name 失败(deploy/get-image-name.sh)
+    [ -z "${CI_COMMIT_BRANCH}" ] || ((git branch -D ${CI_COMMIT_BRANCH} 2>/dev/null || true) && git checkout -b ${CI_COMMIT_BRANCH})

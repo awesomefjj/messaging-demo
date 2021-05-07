@@ -1,0 +1,155 @@
+version: v1beta9
+vars:
+- name: PROJECT_NAME
+  question: "当前部署到哪个项目:"
+  source: input
+  options:
+  - baklib
+  - tamigos
+- name: IMAGE_NAME
+  source: command
+  commands:
+  - command: './deploy/get-image-name.sh'
+    os: linux,darwin
+- name: DEPLOY_ENV
+  question: "当前部署到哪个环境:"
+  source: input
+  options:
+  - dev
+  - staging
+  - production
+  default: dev
+images:
+  app:
+    createPullSecret: false
+    image: docker.corp.tanmer.com/tanmer_paas/apps/messaging/${IMAGE_NAME}
+    tags:
+    - ${DEVSPACE_GIT_COMMIT}
+    entrypoint:
+    - bin/rails
+    - server
+    preferSyncOverRebuild: true
+    injectRestartHelper: true
+    appendDockerfileInstructions:
+    - USER root
+deployments:
+- name: messaging
+  helm:
+    componentChart: true
+    values:
+      rollingUpdate:
+        enabled: true
+        maxSurge: "100%"
+        maxUnavailable: "50%"
+      volumes: &volumes
+      - name: config-volume
+        configMap:
+          name: messaging-rails-config
+      containers:
+      - image: docker.corp.tanmer.com/tanmer_paas/apps/messaging/${IMAGE_NAME}
+        name: rails
+        env: &env
+        - name: RAILS_SERVE_STATIC_FILES
+          value: "yes"
+        - name: RAILS_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: messaging-rails-config
+              key: RAILS_ENV
+        volumeMounts: &volumeMounts
+        - containerPath: /app/.env
+          volume:
+            name: config-volume
+            subPath: .env
+            readOnly: true
+        readinessProbe:
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          httpGet:
+            path: /_healthz
+            port: 3000
+        livenessProbe:
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          tcpSocket:
+            port: 3000
+      service:
+        ports:
+        - port: 3000
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: role
+                operator: In
+                values:
+                - web
+- name: messaging-sidekiq
+  helm:
+    componentChart: true
+    values:
+      rollingUpdate:
+        enabled: true
+        maxSurge: "100%"
+        maxUnavailable: "50%"
+      volumes: *volumes
+      containers:
+      - image: docker.corp.tanmer.com/tanmer_paas/apps/messaging/${IMAGE_NAME}
+        name: sidekiq
+        env: *env
+        volumeMounts: *volumeMounts
+        command:
+        - bin/sidekiq
+        - -c
+        - "5"
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: role
+                operator: In
+                values:
+                - worker
+dev:
+  ports:
+  - labelSelector:
+      app.kubernetes.io/component: messaging
+    forward:
+    - port: 30000
+      remotePort: 3000
+  open:
+  - url: http://localhost:30000
+  sync:
+  - labelSelector:
+      app.kubernetes.io/component: messaging
+    excludePaths:
+    - '**'
+    - '!/app/'
+    - '!/config/'
+    - 'config/application.yml'
+    - '!/lib/'
+    - '!/Gemfile*'
+  interactive:
+    defaultEnabled: true
+    terminal:
+      labelSelector:
+        app.kubernetes.io/component: messaging
+profiles:
+- name: production
+  description: ""
+  patches:
+  - op: remove
+    path: images.app.appendDockerfileInstructions
+- name: staging
+- name: dev
+  patches:
+  - op: remove
+    path: deployments.name=messaging.helm.values.affinity
+  - op: remove
+    path: deployments.name=messaging-sidekiq.helm.values.affinity
+commands:
+- name: create-rails-config
+  description: "创建变量配置"
+  command: "kubectl --context=${DEVSPACE_CONTEXT} --namespace=${DEVSPACE_NAMESPACE} create configmap messaging-rails-config --from-literal=RAILS_ENV=${DEPLOY_ENV} --from-file=.env=.env.${PROJECT_NAME}.${DEPLOY_ENV}"
