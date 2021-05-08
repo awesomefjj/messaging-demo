@@ -1,0 +1,38 @@
+
+<canvas id="myChart" width="400" height="200"></canvas>
+
+<script>
+    var xx = [430,340,450,523,500,489,398,425,414,399,450,422];
+    var ctx = document.getElementById('myChart').getContext('2d');
+    var myChart = new Chart(ctx, {
+        type: 'line',
+        
+        data : {
+        labels: ['Jan','Feb','Mar','Apr','May','June','July','Aug','Sep','Oct','Nov','Dec'],
+      datasets: [{
+        label: 'My First Dataset',
+        data: xx,
+        fill: false,
+        borderColor: 'rgb(75, 192, 192)',
+        tension: 0.1
+      }]
+    },
+        options: {
+            scales: {
+                y: {
+                    suggestedMin: 30,
+                    suggestedMax: 100,
+                    
+                    
+                },
+                yAxes: [{
+            ticks: {
+                beginAtZero: true
+            }
+        }]
+            }
+        }
+    });
+   
+   
+    </script>

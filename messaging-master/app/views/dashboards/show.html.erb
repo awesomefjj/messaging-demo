@@ -1,0 +1,43 @@
+<div class="jumbotron jumbotron-fluid" style="background-image: linear-gradient(#e4f6f7,#e2f7f8);">
+    <div class="container">
+      <h1 class="display-4">Dashboard</h1>
+      <p class="lead">This is a message and event monitoring system</p>
+    </div>
+  </div>
+
+  
+
+
+<div class="list-group">
+   
+        <%= render 'informations' %>
+            
+</div>
+<div class="container d-flex justify-content-between pt-5" style="padding:0">
+    <div class="card col-8 mr-3 shadow" style="padding:0;  background-color: #fff6d4a1">
+        <strong class="card-header text-white" style="background-color: #36bea6">消息量统计</strong>
+        <div class="card-body">
+            <%= render "charts" %>
+        </div>
+    </div>
+    <div class="card col-4 shadow" style="padding:0; background-color: #fff6d4a1;" id="pulse">
+        <strong class="d-block card-header font-14 font-weight-500 text-white" style="background-color:#36bea6">
+            总发送量
+        </strong>
+        <div class="card-body">
+            <div class="display-4 font-weight-500 text-dark">4</div>
+        </div>
+        <%= render "piecharts" %>
+    </div>
+</div>
+<div class="d-flex flex-row justify-content-around pt-5" style="padding:0;">
+    <%= render 'number' %>
+</div>
+
+
+<form>
+    <div class="form-group">
+        <input id="test" type="text" class="form-control"/>
+        <button id="test_btn" class="btn btn-success">点我</button>
+    </div>
+</form>

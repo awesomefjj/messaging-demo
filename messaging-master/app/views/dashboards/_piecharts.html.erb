@@ -1,0 +1,29 @@
+<canvas id='myPieChart' ></canvas>
+<script>
+    
+     var ctx = document.getElementById('myPieChart').getContext('2d');
+    var myPieChart = new Chart(ctx, {
+        type: 'doughnut',
+        
+        data : {
+        labels: ['1st','2nd','3rd','4th'],
+      datasets: [{
+        label: 'My First',
+        data: [230,300,320,220],
+        backgroundColor: [
+        'rgb(245,150,170)',
+        'rgb(18,170,156)',
+        'rgb(255, 177, 27)',
+        'rgb(0,137,167)',
+        ],
+        hoverOffset: 4,
+       
+      }]
+    },
+        options: {
+          
+    
+            }
+        
+    });
+</script>

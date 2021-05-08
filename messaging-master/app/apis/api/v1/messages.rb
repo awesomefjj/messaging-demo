@@ -25,7 +25,7 @@ class API::V1::Messages < Grape::API
       event_params = params.slice(:kind, :title, :content, :redirect_url, :extra_data)
       service = SendToReceiversService.new(**event_params.symbolize_keys)
       service.receiver_to(params[:receiver_type], params[:receiver_ids], params[:tenant_id])
-      # 返回这个事件的数据，方便让调用者将事件推送至app，这哥接口只负责消息持久化，不负责消息推送至app
+      # 返回这个事件的数据，方便让调用者将事件推送至app，这个接口只负责消息持久化，不负责消息推送至app
       success! service.event, with: API::Entities::MessageEvent
     end
 
